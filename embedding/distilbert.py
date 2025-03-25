@@ -1,5 +1,6 @@
 from transformers import DistilBertTokenizer, DistilBertModel
 import torch
+from torch.utils.data import DataLoader, Dataset 
 import numpy as np
 from tqdm import tqdm
 
@@ -72,61 +73,138 @@ def distilbert_embed_all_docs(data, target_col:str, verbose:bool = True):
 
     return output
 
-def embed_all_docs_v2(
-    data, target_col:str, 
-    max_length:int = 512, use_cls:bool = True,
+class LyricsDataset(Dataset):
+    def __init__(self, lyrics):
+        self.lyrics = lyrics
+
+    def __len__(self):
+        return len(self.lyrics)
+
+    def __getitem__(self, idx):
+        return self.lyrics[idx]
+
+def embed_all_lyrics_v2(
+    data, target_col:str,
+    batch_size:int = 32,
+    device:str = 'cpu',
     verbose:bool = True
 ):
     """
     Description
     ----------
-    This function applies the DistilBert embedding to all records in the 
-    `target_col` in `data`.
+    This function applies the DistilBert model to embed all lyrics
+    in our dataset. It does so in mini-batches to speed up the 
+    embedding process without crashing our machine.
 
     Inputs
     ----------
-    data = A pandas dataframe containing the text we want to embed
-        via DistilBert  
-    target_col = The column we wish to embed  
-    max_length = The max token length for DistilBert  
-    use_cls = If true, extracts the [CLS] token embedding, o'wise uses mean 
-        pooling  
-    verbose = If true, prints useful intermediates  
-    
+    data = A pandas dataframe containing the lyrics we want to embed
+    target_col = A column within `data` which has the lyrics.
+    device = The device we are training on
+
     Returns
     ----------
-    output = A numpy array of the embedded records
+    embeddings = A torch tensor containing the embedded lyrics
     """
-    # retrieve objects from transformers
+    assert target_col in data.columns
+    assert device in ['cpu', 'cuda']
+
+    # Load DistilBERT model and tokenizer
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-    model = DistilBertModel.from_pretrained('distilbert-base-uncased')
-    model.eval() # no grad computation
+    bert_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    bert_model.eval() # disables dropout
 
-    # tokenize records
-    tokens = tokenizer(
-        data[target_col].tolist(),
-        padding = True,
-        truncation = True,
-        max_length = max_length,
-        return_tensors = 'pt'
-    )
+    # helper function
+    def collate_fn(batch):
+        """Tokenize and pad batch"""
+        encoded = tokenizer(batch, padding = True, truncation = True, max_length = 512, return_tensors = 'pt')
+        output = {key: val.to(device) for key, val in encoded.items()}
+        return output 
+    
+    # convert lyrics column to list
+    lyrics_list = data[target_col].tolist()
 
-    # extract last hidden state from output
+    # create DataLoader for batching
+    lyrics_dataset = LyricsDataset(lyrics_list)
+    lyrics_loader = DataLoader(lyrics_dataset, batch_size = batch_size, collate_fn = collate_fn)
+
+    # instantiate object to store embeddings
+    embeddings = []
+
+    # iterate through batches to generate embeddings
     with torch.no_grad():
-        outputs = model(**tokens)
+        for batch in tqdm(lyrics_loader):
+            outputs = bert_model(**batch)
+            cls_embeddings = outputs.last_hidden_state[:, 0, :] # extract CLS token
+            embeddings.append(cls_embeddings)
 
-    last_hidden = outputs.last_hidden_state # (batch_size, seq_len, 768)
-
-    # create embeddings based on strategy selected
-    if use_cls:
-        # extract the [CLS] toen embedding (first token)
-        embeddings = last_hidden[:, 0, :] # (batch_size, 768)
-    else:
-        # mean pooling across all tokens (excluding padding tokens)
-        attention_mask = tokens['attention_mask'].unsqueeze(-1)
-        embeddings = (last_hidden @ attention_mask).sum(dim = 1) / attention_mask.sum(dim = 1)
+    # convert to tensor
+    embeddings = torch.cat(embeddings, dim = 0)
 
     if verbose:
-        print(f'DistilBERT Embedded Lyrics: {embeddings.numpy().shape}')
+        print(f'DistilBERT Embedded Lyrics: {embeddings.shape}')
 
-    return embeddings.numpy()
+    return embeddings
+
+# =================
+# === GRAVEYARD ===
+# =================
+
+# def embed_all_docs_v2(
+#     data, target_col:str, 
+#     max_length:int = 512, use_cls:bool = True,
+#     verbose:bool = True
+# ):
+#     """
+#     Description
+#     ----------
+#     This function applies the DistilBert embedding to all records in the 
+#     `target_col` in `data`.
+
+#     Inputs
+#     ----------
+#     data = A pandas dataframe containing the text we want to embed
+#         via DistilBert  
+#     target_col = The column we wish to embed  
+#     max_length = The max token length for DistilBert  
+#     use_cls = If true, extracts the [CLS] token embedding, o'wise uses mean 
+#         pooling  
+#     verbose = If true, prints useful intermediates  
+    
+#     Returns
+#     ----------
+#     output = A numpy array of the embedded records
+#     """
+#     # retrieve objects from transformers
+#     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+#     model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+#     model.eval() # no grad computation
+
+#     # tokenize records
+#     tokens = tokenizer(
+#         data[target_col].tolist(),
+#         padding = True,
+#         truncation = True,
+#         max_length = max_length,
+#         return_tensors = 'pt'
+#     )
+
+#     # extract last hidden state from output
+#     with torch.no_grad():
+#         outputs = model(**tokens)
+
+#     last_hidden = outputs.last_hidden_state # (batch_size, seq_len, 768)
+
+#     # create embeddings based on strategy selected
+#     if use_cls:
+#         # extract the [CLS] toen embedding (first token)
+#         embeddings = last_hidden[:, 0, :] # (batch_size, 768)
+#     else:
+#         # mean pooling across all tokens (excluding padding tokens)
+#         attention_mask = tokens['attention_mask'].unsqueeze(-1)
+#         embeddings = (last_hidden @ attention_mask).sum(dim = 1) / attention_mask.sum(dim = 1)
+
+#     if verbose:
+#         print(f'DistilBERT Embedded Lyrics: {embeddings.numpy().shape}')
+
+#     return embeddings.numpy()

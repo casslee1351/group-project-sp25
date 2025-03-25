@@ -40,31 +40,32 @@ class SimpleRNN(nn.Module):
         
         self.dropout = nn.Dropout(p = dropout)
         self.fc = nn.Linear(hidden_dim * 2, output_dim)
-        self.softmax = nn.Softmax(dim = 1)
+        self.softmax = nn.Softmax(dim = -1) # apply along last dimension
 
     def forward(self, x):
-        print(f'x = {x.shape}')
+        # ensure input has seq_len = 1 for the RNN
+        # x: (batch_size, 1, input_dim)
+        x = x.unsqueeze(1) # (batch_size, 1, input_dim)
+
         # pass through RNN and get the final hidden state
+        # hidden: (num_layers * 2, batch_size, hidden_dim)
         _, hidden = self.rnn(x)
-        print(f'hidden = {hidden.shape}')
 
         # stitch the last forward-looking and backward-looking hidden dims
         if self.num_layers == 1:
-            hidden = torch.cat((hidden[0], hidden[1]), dim = 1)
+            # implement!
+            print(f'hidden = {hidden.shape}')
+            assert True == False, 'TODO: Implement this section'
         elif self.num_layers > 1:
-            hidden = torch.cat((
-                hidden[-2, :, :], 
-                hidden[-1, :, :]
-            ), dim = 1)
-
-        print(f'hidden = {hidden.shape}')
+            ## hidden: (batch_size, hidden_dim * 2)
+            forward_hidden = hidden[-2, :, :] # last layers forward hidden state
+            backward_hidden = hidden[-1, :, :] # last layers backward hidden state
+            hidden = torch.cat((forward_hidden, backward_hidden), dim = -1)
 
         # pass through fully connected later
-        out = self.dropout(hidden)
-        out = self.fc(out)
-        print(f'fc out = {out.shape}')
+        ## fc out: (batch_size, output_dim)
+        out = self.fc(hidden)
         out = self.softmax(out)
-        print(f'softmax out = {out.shape}')
 
         return out
 
