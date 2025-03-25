@@ -5,6 +5,9 @@
 
 Inspired by the work of Tsaptsinos et al 2017 of using a hierarchical framework
 for predicting song genre given lyrics.
+
+NOTE: This architecture does not make sense when using DistilBERT, since we 
+only have 1 vector per song, rather than 1 vector for word in each song.
 """
 import torch
 from torch import nn 
@@ -50,9 +53,13 @@ class HANClassifier(nn.Module):
         self.softmax = nn.Softmax(dim = 1)
 
     def forward(self, x):
+        print(f'x = {x.shape}')
         rnn_out, _ = self.rnn(x)
+        print(f'rnn_out = {rnn_out.shape}')
         attn_out = self.attention(rnn_out)
+        print(f'attn_out = {attn_out.shape}')
         out = self.fc(attn_out)
+        print(f'out = {out.shape}')
 
         return self.softmax(out)
 
