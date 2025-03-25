@@ -95,7 +95,7 @@ def nn_training(
             best_val_loss = val_loss
             best_epoch = epoch
             waiting = 0
-            torch.save(model.state_dict(), f'models/MGC {model.__class__.__name__}.pth')
+            torch.save(model.state_dict(), f'models/MGC_{model.__class__.__name__}.pth')
         else:
             waiting += 1
 
