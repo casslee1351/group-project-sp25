@@ -61,6 +61,7 @@ def read_lyrics(
 
 def read_lyrics_dask(
     filepath:str = 'data/song_lyrics.csv',
+    block_size = '32MB',
     exclude_non_english:bool = True,
     resample_genres:bool = True,
     save_data:bool = True,
@@ -76,6 +77,7 @@ def read_lyrics_dask(
     Inputs
     ----------
     filepath = The relative path to the file
+    block_size = The size of the blocks that dask will partition the data by
     exclude_non_english = If true, fitlers out non-english words
     resample_genres = If true, resamples records up to the median of count
         songs by genre. This way we don't wind up with extreme unbalance.
@@ -87,7 +89,29 @@ def read_lyrics_dask(
     df = A pandas dataframe containing our lyrics
     """
     # read the dataset with dask
-    df = dd.read_csv(filepath)
+    df = dd.read_csv(
+        filepath, 
+        blocksize = block_size,
+        dtype_backend = 'numpy_nullable',
+        na_values = ["", "NA"],
+        keep_default_na = True,
+        on_bad_lines = 'skip',
+        quoting = 3,
+        encoding = 'utf-8',
+        dtype = {
+            # 'title': 'string',
+            # 'tag': 'string',
+            # 'artist': 'string',
+            'year': 'int',
+            'views': 'int',
+            # 'features': 'string',
+            # 'lyrics': 'string',
+            # 'id': 'int',
+            # 'language_cld3': 'string',
+            'language_ft': 'string',
+            # 'language': 'string'
+        }
+    )
 
     # (optional) filter out non-english
     if exclude_non_english:
