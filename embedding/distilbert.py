@@ -96,6 +96,11 @@ def embed_all_lyrics_v2(
     in our dataset. It does so in mini-batches to speed up the 
     embedding process without crashing our machine.
 
+    NOTE: We are choosing to extract the CLS Token summary from the last 
+    hidden state. We could instead extract the entire sequence of token
+    embeddings. In which case the output shape would instead be 
+    [n_songs, max_sequence_length, 768].
+
     Inputs
     ----------
     data = A pandas dataframe containing the lyrics we want to embed
@@ -104,20 +109,25 @@ def embed_all_lyrics_v2(
 
     Returns
     ----------
-    embeddings = A torch tensor containing the embedded lyrics
+    embeddings = A torch tensor containing the embedded lyrics with 
+        shape [n_songs, 768]..
     """
     assert target_col in data.columns
     assert device in ['cpu', 'cuda']
 
     # Load DistilBERT model and tokenizer
-    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-    bert_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    model_name = 'distilbert-base-uncased'
+    tokenizer = DistilBertTokenizer.from_pretrained(model_name)
+    bert_model = DistilBertModel.from_pretrained(model_name)
+
+    # move model to device
+    bert_model.to(device)
     bert_model.eval() # disables dropout
 
     # helper function
     def collate_fn(batch):
         """Tokenize and pad batch"""
-        encoded = tokenizer(batch, padding = True, truncation = True, max_length = 512, return_tensors = 'pt')
+        encoded = tokenizer(batch, padding = True, truncation = True, max_length = 512, return_tensors = 'pt').to(device)
         output = {key: val.to(device) for key, val in encoded.items()}
         return output 
     

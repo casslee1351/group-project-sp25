@@ -96,20 +96,16 @@ def nn_training(
             best_epoch = epoch
             waiting = 0
             torch.save(model.state_dict(), f'models/MGC_{model.__class__.__name__}.pth')
+            if verbose and (epoch + 1) % print_every == 0:
+                print(
+                    f'[{epoch + 1} / {num_epochs}] '
+                    f'Train Loss = {train_loss:.4f}, '
+                    f'Val Loss = {val_loss:.4f} '
+                    f'**New Best Model**'
+                )
         else:
             waiting += 1
-
-
-        if verbose:
-            if (epoch + 1) % print_every == 0:
-                if val_loss < best_val_loss:
-                    print(
-                        f'[{epoch + 1} / {num_epochs}] '
-                        f'Train Loss = {train_loss:.4f}, '
-                        f'Val Loss = {val_loss:.4f} '
-                        f'**New Best Model**'
-                    )
-                else:
+            if verbose and (epoch + 1) % print_every == 0:
                     print(
                         f'[{epoch + 1} / {num_epochs}] '
                         f'Train Loss = {train_loss:.4f}, '
@@ -120,3 +116,51 @@ def nn_training(
             print(f'Early Stopping Triggered. Training Stopped.')
             print(f'\tBest Epoch = {best_epoch}, Best Val Loss = {best_val_loss}')
             break
+
+def evaluate_nn_model_against_test_set(
+    model, test_dataset,
+    device:str = 'cpu',
+    verbose:bool = True
+):
+    """
+    Description
+    ----------
+    This function uses the provided neural network `model` to predict
+    the song genre of the provided lyrics in `input_lyrics` and compares
+    them against the `target_genres`
+
+    Inputs
+    ----------
+    model = The neural network we want to use to generate predictions
+    test_dataset = The withheld test set for evaluation
+    device = The device we are working on
+
+    Returns
+    ----------
+
+    """
+    assert device in ['cpu', 'cuda']
+
+    # iterate through the test set to generate predictions
+    model.eval()
+    correct, total = 0, 0
+    with torch.no_grad():
+        for X, y in test_dataset:
+            
+            ## store tensors to device
+            X, y = X.to(device), y.to(device)
+
+            ## use model to predict y
+            outputs = model(X)
+            y_pred = torch.argmax(outputs, dim = -1)
+
+            ## cumulatively calc accuracy
+            correct += (y_pred == y).sum().item()
+            total += y.size(0)
+
+    accuracy = correct / total 
+
+    if verbose:
+        print(f'Model Accuracy = {100 * accuracy:.2f}%')
+
+    return accuracy
