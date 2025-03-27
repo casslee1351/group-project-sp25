@@ -152,7 +152,7 @@ def embed_all_lyrics_v2(
     embeddings = torch.cat(embeddings, dim = 0)
 
     if verbose:
-        print(f'DistilBERT Embedded Lyrics: {embeddings.shape}')
+        print(f'DistilBERT Embedded Lyrics: Shape = (n_songs, distilbert_embed_len) = {embeddings.shape}')
 
     return embeddings
 

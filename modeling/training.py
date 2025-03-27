@@ -6,6 +6,7 @@ from tqdm import tqdm
 def nn_training(
     model,
     train_loader, val_loader,
+    embed_strategy:str,
     learning_rate:float = 0.001,
     num_epochs:int = 100, patience:int = 5,
     device:str = 'cpu',
@@ -23,6 +24,7 @@ def nn_training(
     model = An instantiated torch neural network model that we want to train
     train_loader = The DataLoader object containing our training set
     val_loader = The DataLoader object containing our validation set
+    embed_strategy = The method by which we embedded the songs
     learning_rate = The rate at which we want to learn
     num_epochs = The (max) number of epochs we want to train for
     patience = The number of epochs beyond the current best epoch that we
@@ -95,7 +97,7 @@ def nn_training(
             best_val_loss = val_loss
             best_epoch = epoch
             waiting = 0
-            torch.save(model.state_dict(), f'models/MGC_{model.__class__.__name__}.pth')
+            torch.save(model.state_dict(), f'models/{embed_strategy}_{model.__class__.__name__}_Trained.pth')
             if verbose and (epoch + 1) % print_every == 0:
                 print(
                     f'[{epoch + 1} / {num_epochs}] '
