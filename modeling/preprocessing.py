@@ -3,6 +3,10 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 import pandas as pd
+import numpy as np
+
+from transformers import GPT2Tokenizer
+from datasets import Dataset
 
 def create_datasets(
     data_embed, labels,
@@ -61,3 +65,67 @@ def create_datasets(
         print(f'Test: {len(test_loader)} Batches of Size {batch_size} For Final Eval')
 
     return train_loader, val_loader, test_loader
+
+def gpt2_create_datasets(
+    data,
+    label_mapping:dict,
+    input_col:str, label_col:str,
+    val_pct:float = 0.15,
+    verbose:bool = True
+):
+    """ 
+    Description
+    ----------
+    This function performs the preprocessing expected for the GPT2 
+    Fine Tuning process.
+
+    Inputs
+    ---------
+    data = The complete dataset containing our lyrics and genres
+    label_mapping = A dict containing the label mapping we wish to
+        use to translate `label_col` to numbers.
+    input_col = The column from `data` we wish to encode for inputs
+    label_col = The column from `data` we wish to encore as labels
+    val_pct = The percent of data we want to withhold for validation
+        *and* testing
+    verbose = If true, prints useful intermediates
+
+    Returns
+    ----------
+    train_dataset, val_dataset, test_dataset = The dataset objects used for
+        fine tuning the GPT2 model from hugging face.
+    tokenizer = The tokenizer used on the inputs. We export it here to 
+        ensure it can be used again for training
+    """
+    # prepare df for downstream processing
+    # X = np.array(data[input_col])
+    inv_map = {v: k for k, v in label_mapping.items()}
+    y = np.array(data[label_col].map(inv_map))
+    df = data.copy().rename(columns = {'genre': 'label'})
+    df['label'] = y
+
+    # initialize input tokenizer
+    # This is used to convert the text data(lyrics) to a format understandable by GPT-2 model
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    tokenizer.pad_token = tokenizer.eos_token
+
+    # tokenize the inputs and load into dataset
+    def tokenize_fx(ex):
+        output = tokenizer(ex[input_col], padding = 'max_length', truncation = True, max_length = 512)
+        return output
+    dataset = Dataset.from_pandas(df)
+    dataset = dataset.map(tokenize_fx, batched = True)
+
+    # train val test split
+    train_test_split1 = dataset.train_test_split(test_size = (2 * val_pct))
+    train_dataset = train_test_split1['train']
+    train_test_split2 = train_test_split1['test'].train_test_split(test_size = 0.5)
+    val_dataset = train_test_split2['train']
+    test_dataset = train_test_split2['test']
+
+    if verbose:
+        print(f'Train: Length = {len(train_dataset)}')
+        print(f'Val:   Length = {len(val_dataset)}')
+        print(f'Test:  Length = {len(test_dataset)}')
+
+    return train_dataset, val_dataset, test_dataset, tokenizer

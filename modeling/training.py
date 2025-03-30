@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
+from transformers import GPT2ForSequenceClassification, Trainer, TrainingArguments
+from datetime import datetime
+
 def nn_training(
     model,
     train_loader, val_loader,
@@ -166,3 +169,97 @@ def evaluate_nn_model_against_test_set(
         print(f'Model Accuracy = {100 * accuracy:.2f}%')
 
     return accuracy
+
+def gpt2_fine_tuning(
+    train_dataset, val_dataset, test_dataset,
+    input_tokenizer,
+    num_labels:int,
+    batch_size:int = 4,
+    num_epochs:int = 5,
+    learning_rate:float = 0.001,
+    save_model:bool = True,
+    verbose:bool = True
+):
+    """ 
+    Description
+    ----------
+    
+    Inputs
+    ----------
+    train_dataset = The dataset we want to fine tune the GPT model
+        against.
+    val_dataset = The dataset we want to use to evaluated the GPT 
+        model fine tuning process after each epoch
+    test_dataset = The dataset we want to use to test the performance
+        of the fine tuned GPT2 model after training is complete.
+    input_tokenizer = The tokenizer used to initially tokenize the 
+        inputs.
+    num_labels = The number of unique values in our classifier model
+    batch_size = The size of batches we want for training
+    num_epochs = The number of epochs we wish to train for
+    learning_rate = The rate at which we want to learn
+    save_model = If true, saves the fine tuned model
+    verbose = If true, prints useful intermediates
+
+    Returns
+    ----------
+
+    """
+    # load GPT-2 model with classification head
+    model = GPT2ForSequenceClassification.from_pretrained('gpt2', num_labels = num_labels)
+    model.config.pad_token_id = model.config.eos_token_id # ensure padding works correctly
+
+    if verbose:
+        print(model)
+
+    # define training arguments
+    training_args = TrainingArguments(
+        output_dir = './results',
+        eval_strategy = 'epoch',
+        save_strategy = 'epoch',
+        per_device_train_batch_size = batch_size,
+        per_device_eval_batch_size = batch_size,
+        num_train_epochs = num_epochs,
+        learning_rate = learning_rate,
+        weight_decay = 0.01,
+        logging_dir = './logs',
+        logging_steps = 10,
+        load_best_model_at_end = True
+    )
+
+    # initialize Trainer
+    trainer = Trainer(
+        model = model,
+        args = training_args,
+        train_dataset = train_dataset,
+        eval_dataset = val_dataset,
+        processing_class = input_tokenizer 
+    )
+
+    # train the model
+    if verbose:
+        train_start = datetime.now()
+        print(f'GPT2 Fine Tuning: Start Time = {train_start.strftime("%Y-%m-%d %H:%M:%S")}')
+
+    trainer.train()
+
+    if verbose:
+        train_end = datetime.now()
+        train_time = (train_end - train_start).seconds
+        print(f'GPT2 Fine Tuning: Trained. Check the models subfolder for the trained model.')
+        print(f'GPT2 Fine Tuning: End Time = {train_start.strftime("%Y-%m-%d %H:%M:%S")}, Duration = {train_time / 60:.2f}min')
+
+
+    # save the trained model
+    model.save_pretrained('models/GPT2_FineTune_Trained')
+    input_tokenizer.save_pretrained('tokenizers/GPT2_FineTune_Trained')
+
+    # evaluate model performance
+    test_eval = trainer.evaluate(test_dataset)
+
+    if verbose:
+        print(f'GPT2 Fine Tuning: Test Performance...')
+        for k, v in test_eval.items():
+            print(f'\t{k}: {v}')
+
+    return model
