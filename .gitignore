@@ -179,3 +179,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 data/song_lyrics_clean.csv
+/logs
+/results
+models/GPT2_FineTune_Trained/model.safetensors
